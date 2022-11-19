@@ -40,4 +40,7 @@ export COMMANDLINE_ARGS="--medvram"
 #export CODEFORMER_COMMIT_HASH=""
 #export BLIP_COMMIT_HASH=""
 
+# Uncomment to enable accelerated launch
+#export ACCELERATE="True"
+
 ###########################################
