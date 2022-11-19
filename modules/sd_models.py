@@ -163,11 +163,14 @@ def load_model_weights(model, checkpoint_info, vae_file="auto"):
     checkpoint_file = checkpoint_info.filename
     sd_model_hash = checkpoint_info.hash
 
-    vae_file = sd_vae.resolve_vae(checkpoint_file, vae_file=vae_file)
+    cache_enabled = shared.opts.sd_checkpoint_cache > 0
 
-    checkpoint_key = checkpoint_info
-
-    if checkpoint_key not in checkpoints_loaded:
+    if cache_enabled and checkpoint_info in checkpoints_loaded:
+        # use checkpoint cache
+        print(f"Loading weights [{sd_model_hash}] from cache")
+        model.load_state_dict(checkpoints_loaded[checkpoint_info])
+    else:
+        # load from file
         print(f"Loading weights [{sd_model_hash}] from {checkpoint_file}")
 
         pl_sd = torch.load(checkpoint_file, map_location=shared.weight_load_location)
@@ -178,6 +181,10 @@ def load_model_weights(model, checkpoint_info, vae_file="auto"):
         del pl_sd
         model.load_state_dict(sd, strict=False)
         del sd
+        
+        if cache_enabled:
+            # cache newly loaded model
+            checkpoints_loaded[checkpoint_info] = model.state_dict().copy()
 
         if shared.cmd_opts.opt_channelslast:
             model.to(memory_format=torch.channels_last)
@@ -197,22 +204,16 @@ def load_model_weights(model, checkpoint_info, vae_file="auto"):
 
         model.first_stage_model.to(devices.dtype_vae)
 
-        if shared.opts.sd_checkpoint_cache > 0:
-            # if PR #4035 were to get merged, restore base VAE first before caching
-            checkpoints_loaded[checkpoint_key] = model.state_dict().copy()
-            while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache:
-                checkpoints_loaded.popitem(last=False)  # LRU
-
-    else:
-        vae_name = sd_vae.get_filename(vae_file)
-        print(f"Loading weights [{sd_model_hash}] with {vae_name} VAE from cache")
-        checkpoints_loaded.move_to_end(checkpoint_key)
-        model.load_state_dict(checkpoints_loaded[checkpoint_key])
+    # clean up cache if limit is reached
+    if cache_enabled:
+        while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache + 1: # we need to count the current model
+            checkpoints_loaded.popitem(last=False)  # LRU
 
     model.sd_model_hash = sd_model_hash
     model.sd_model_checkpoint = checkpoint_file
     model.sd_checkpoint_info = checkpoint_info
 
+    vae_file = sd_vae.resolve_vae(checkpoint_file, vae_file=vae_file)
     sd_vae.load_vae(model, vae_file)
 
 
