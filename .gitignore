@@ -1,5 +1,6 @@
 __pycache__
 *.ckpt
+*.safetensors
 *.pth
 /*.custom.bat
 /*.custom.sh
@@ -33,3 +34,4 @@ notification.mp3
 /extensions
 /test/stdout.txt
 /test/stderr.txt
+/cache.json
